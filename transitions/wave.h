@@ -19,7 +19,6 @@ public:
   void run(BladeBase *blade) {
     wave_size_.run(blade);
     wave_center_.run(blade);
-    wave_ms_.run(blade);
     color_.run(blade);
     if (this->restart()) {
       center_ = wave_center_.getInteger(0);

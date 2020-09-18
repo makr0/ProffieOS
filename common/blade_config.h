@@ -20,10 +20,4 @@ struct BladeConfig {
 
 extern BladeConfig* current_config;
 
-struct RFID_Command {
-  uint64_t id;
-  const char* cmd;
-  const char* arg;
-};
-
 #endif

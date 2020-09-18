@@ -35,7 +35,7 @@ private:
   bool restart_ = false;
   MILLIS millis_;
   uint32_t start_millis_;
-  uint32_t len_ = 0;
+  int len_ = 0;
 };
 
 #endif

@@ -69,7 +69,7 @@ Preset presets[] = {
     StyleNormalPtr<BLACK, BLACK, 300, 800>(), "Battery\nLevel"}
 };
 BladeConfig blades[] = {
-  { 0, SPIBladePtr<99, bladePin, blade2Pin, Color8::BGR, PowerPINS<bladePowerPin1>, 12000000> (),
+  { 0, WS281XBladePtr<99, bladePin, Color8::BGR, PowerPINS<bladePowerPin1>, SpiLedPin<blade2Pin>, 12000000> (),
      SimpleBladePtr<CreeXPE2WhiteTemplate<550>,
                     CreeXPE2BlueTemplate<240>,
                     CreeXPE2BlueTemplate<240>, NoLED, bladePowerPin4, bladePowerPin5, bladePowerPin6, -1>(),

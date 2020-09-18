@@ -21,7 +21,8 @@
 // You can have multiple configuration files, and specify which one
 // to use here.
 
-#define CONFIG_FILE "config/default_proffieboard_config.h"
+#define CONFIG_FILE "config/proffieboard_v2_myconfig.h"
+ //#define CONFIG_FILE "config/default_proffieboard_config.h"
 // #define CONFIG_FILE "config/default_v3_config.h"
 // #define CONFIG_FILE "config/crossguard_config.h"
 // #define CONFIG_FILE "config/graflex_v1_config.h"
@@ -31,8 +32,6 @@
 // #define CONFIG_FILE "config/toy_saber_config.h"
 // #define CONFIG_FILE "config/proffieboard_v1_test_bench_config.h"
 // #define CONFIG_FILE "config/td_proffieboard_config.h"
-// #define CONFIG_FILE "config/teensy_audio_shield_micom.h"
-// #define CONFIG_FILE "config/proffieboard_v2_ob4.h"
 
 #ifdef CONFIG_FILE_TEST
 #undef CONFIG_FILE
@@ -129,14 +128,9 @@
 #ifdef TEENSYDUINO
 #include <DMAChannel.h>
 #include <usb_dev.h>
-
-#ifndef USE_TEENSY4
 #include <kinetis.h>
-#endif
-
 #include <i2c_t3.h>
 #include <SD.h>
-#include <SPI.h>
 
 #define INPUT_ANALOG INPUT
 #else
@@ -163,6 +157,7 @@
 
 #endif
 
+#include <SPI.h>
 #include <math.h>
 #include <malloc.h>
 
@@ -189,7 +184,7 @@ SnoozeTouch snooze_touch;
 SnoozeBlock snooze_config(snooze_touch, snooze_digital, snooze_timer);
 #endif
 
-const char version[] = "$Id: ce12a06a1e236b5101ec60c950530a9a4719a74d $";
+const char version[] = "v4.8";
 const char install_time[] = __DATE__ " " __TIME__;
 
 #include "common/state_machine.h"
@@ -265,7 +260,6 @@ public:
 #include "common/profiling.h"
 
 uint64_t audio_dma_interrupt_cycles = 0;
-uint64_t pixel_dma_interrupt_cycles = 0;
 uint64_t wav_interrupt_cycles = 0;
 uint64_t loop_cycles = 0;
 
@@ -318,9 +312,6 @@ int32_t clampi32(int32_t x, int32_t a, int32_t b) {
 }
 int16_t clamptoi16(int32_t x) {
   return clampi32(x, -32768, 32767);
-}
-int32_t clamptoi24(int32_t x) {
-  return clampi32(x, -8388608, 8388607);
 }
 
 #include "common/sin_table.h"
@@ -430,10 +421,6 @@ struct is_same_type<T, T> { static const bool value = true; };
 #include "functions/twist_angle.h"
 #include "functions/layer_functions.h"
 #include "functions/islessthan.h"
-#include "functions/circular_section.h"
-#include "functions/marble.h"
-#include "functions/slice.h"
-#include "functions/mult.h"
 
 // transitions
 #include "transitions/fade.h"
@@ -562,13 +549,7 @@ class NoLED;
 #include "styles/length_finder.h"
 
 BladeConfig* current_config = nullptr;
-class BladeBase* GetPrimaryBlade() {
-#if NUM_BLADES == 0
-  return nullptr;
-#else  
-  return current_config->blade1;
-#endif  
-}
+class BladeBase* GetPrimaryBlade() { return current_config->blade1; }
 const char* GetSaveDir() {
   if (!current_config) return "";
   if (!current_config->save_dir) return "";
@@ -1009,7 +990,6 @@ class Commands : public CommandParser {
       // TODO: list cpu usage for various objects.
       float total_cycles =
         (float)(audio_dma_interrupt_cycles +
-	        pixel_dma_interrupt_cycles +
                  wav_interrupt_cycles +
 		 Looper::CountCycles() +
 		 CountProfileCycles());
@@ -1018,9 +998,6 @@ class Commands : public CommandParser {
       STDOUT.println("%");
       STDOUT.print("Wav reading: ");
       STDOUT.print(wav_interrupt_cycles * 100.0f / total_cycles);
-      STDOUT.println("%");
-      STDOUT.print("Pixel DMA: ");
-      STDOUT.print(pixel_dma_interrupt_cycles * 100.0f / total_cycles);
       STDOUT.println("%");
       STDOUT.print("LOOP: ");
       STDOUT.print(loop_cycles * 100.0f / total_cycles);
@@ -1033,7 +1010,6 @@ class Commands : public CommandParser {
       DumpProfileLocations(total_cycles);
       noInterrupts();
       audio_dma_interrupt_cycles = 0;
-      pixel_dma_interrupt_cycles = 0;
       wav_interrupt_cycles = 0;
       interrupts();
       return true;
@@ -1261,25 +1237,6 @@ class Commands : public CommandParser {
     }
 #endif // ENABLE_DEVELOPER_COMMANDS
 
-#ifdef ENABLE_DEVELOPER_COMMANDS
-#ifdef HAVE_STM32L4_DMA_GET    
-    if (!strcmp(cmd, "dmamap")) {
-      for (int channel = 0; channel < 16; channel++) {
-	stm32l4_dma_t *dma = stm32l4_dma_get(channel);
-	if (dma) {
-	  STDOUT.print(" DMA");
-	  STDOUT.print( 1 +(channel / 8) );
-	  STDOUT.print("_CH");
-	  STDOUT.print( channel % 8 );
-	  STDOUT.print(" = ");
-	  STDOUT.println(dma->channel >> 4, HEX);
-	}
-      }
-      return true;
-    }
-#endif // HAVE_STM32L4_DMA_GET    
-#endif // ENABLE_DEVELOPER_COMMANDS
-
 #endif  // TEENSYDUINO
 
     return false;
@@ -1339,82 +1296,6 @@ public:
   static const char* response_header() { return "-+=BEGIN_OUTPUT=+-\n"; }
   static const char* response_footer() { return "-+=END_OUTPUT=+-\n"; }
 };
-#endif
-
-#ifdef RFID_SERIAL
-class RFIDParser : public Looper {
-public:
-  RFIDParser() : Looper() {}
-  const char* name() override { return "Parser"; }
-  void Setup() override {
-    RFID_SERIAL.begin(9600);
-  }
-
-#define RFID_READCHAR() do {						\
-  state_machine_.sleep_until_ = millis();				\
-  while (!RFID_SERIAL.available()) {					\
-    if (millis() - state_machine_.sleep_until_ > 200) goto retry;	\
-    YIELD();								\
-  }									\
-  getc();								\
-} while (0)
-
-  int c, x;
-  uint64_t code;
-
-  void getc() {
-    c = RFID_SERIAL.read();
-    if (monitor.IsMonitoring(Monitoring::MonitorSerial)) {
-      default_output->print("SER: ");
-      default_output->println(c, HEX);
-    }
-  }
-
-  void Loop() override {
-    STATE_MACHINE_BEGIN();
-    while (true) {
-    retry:
-      RFID_READCHAR();
-      if (c != 2) goto retry;
-      code = 0;
-      for (x = 0; x < 10; x++) {
-	RFID_READCHAR();
-	code <<= 4;
-	if (c >= '0' && c <= '9') {
-	  code |= c - '0';
-	} else if (c >= 'A' && c <= 'F') {
-	  code |= c - ('A' - 10);
-	} else {
-	  goto retry;
-	}
-      }
-      RFID_READCHAR();
-      x = code ^ (code >> 24);
-      x ^= (x >> 8) ^ (x >> 16);
-      x &= 0xff;
-      if (c != x) goto retry;
-      RFID_READCHAR();
-      if (c == 3) {
-	default_output->print("RFID: ");
-	for (int i = 36; i >= 0; i-=4) {
-	  default_output->print((int)((code >> i) & 0xf), HEX);
-	}
-	default_output->println("");
-	for (size_t i = 0; i < NELEM(RFID_Commands); i++) {
-	  if (code == RFID_Commands[i].id) {
-	    CommandParser::DoParse(RFID_Commands[i].cmd, RFID_Commands[i].arg);
-	  }
-	}
-      }
-    }
-    STATE_MACHINE_END();
-  }
-
-private:
-  StateMachineState state_machine_;
-};
-
-StaticWrapper<RFIDParser> rfid_parser;
 #endif
 
 // Command-line parser. Easiest way to use it is to start the arduino
@@ -1701,26 +1582,12 @@ void setup() {
   // Accumulate some entrypy while we wait.
   uint32_t now = millis();
 #ifdef DOSFS_CONFIG_STARTUP_DELAY
-#define PROFFIEOS_SD_STARTUP_DELAY DOSFS_CONFIG_STARTUP_DELAY
+#define PROFFIEOS_STARTUP_DELAY DOSFS_CONFIG_STARTUP_DELAY
 #else
-#define PROFFIEOS_SD_STARTUP_DELAY 1000
+#define PROFFIEOS_STARTUP_DELAY 1000
 #endif
-
-#ifndef CONFIG_STARTUP_DELAY
-#define CONFIG_STARTUP_DELAY 0
-#endif
-
-#if PROFFIEOS_SD_STARTUP_DELAY > CONFIG_STARTUP_DELAY
-#define PROFFIEOS_STARTUP_DELAY PROFFIEOS_SD_STARTUP_DELAY
-#else
-#define PROFFIEOS_STARTUP_DELAY CONFIG_STARTUP_DELAY
-#endif
-
   while (millis() - now < PROFFIEOS_STARTUP_DELAY) {
-#ifndef NO_BATTERY_MONITOR  
     srand((rand() * 917823) ^ LSAnalogRead(batteryLevelPin));
-#endif
-
 #ifdef BLADE_DETECT_PIN
     // Figure out if blade is connected or not.
     // Note that if PROFFIEOS_STARTUP_DELAY is smaller than
